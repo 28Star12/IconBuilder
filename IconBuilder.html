@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Générateur d'Icône macOS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Animation d'apparition en douceur */
+        .fade-in {
+            animation: fadeIn 0.4s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col items-center justify-center p-4 font-sans text-gray-800">
+
+    <div class="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden p-6 fade-in">
+        <h1 class="text-2xl font-bold text-center text-gray-900 mb-2">Icône macOS</h1>
+        <p class="text-sm text-center text-gray-500 mb-8">Transformez votre image en icône parfaitement recadrée.</p>
+
+        <!-- ETAPE 1 : Upload -->
+        <div id="step-upload" class="block">
+            <label class="flex flex-col items-center justify-center w-full h-64 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition">
+                <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                    <svg class="w-10 h-10 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                    <p class="mb-2 text-sm text-gray-500 font-semibold">Cliquez pour ajouter une image</p>
+                    <p class="text-xs text-gray-400">PNG, JPG, WEBP</p>
+                </div>
+                <input id="file-input" type="file" class="hidden" accept="image/*" />
+            </label>
+        </div>
+
+        <!-- ETAPE 2 : Aperçu avec Masque -->
+        <div id="step-preview" class="hidden fade-in">
+            <h2 class="text-sm font-semibold text-gray-700 mb-3 text-center">Ajustez votre image :</h2>
+            
+            <!-- Conteneur carré de l'aperçu -->
+            <!-- Note: shadow-inner et bords retirés pour ne pas perturber le calcul de taille -->
+            <div id="crop-container" class="relative w-full aspect-square rounded-lg overflow-hidden bg-gray-200 cursor-move touch-none">
+                <!-- L'image en arrière-plan (max-w-none essentiel pour éviter l'écrasement CSS) -->
+                <img id="preview-image" class="absolute origin-top-left pointer-events-none max-w-none max-h-none" src="" alt="Aperçu" draggable="false" style="transform: translate(0px, 0px) scale(1);" />
+                
+                <!-- Le masque sombre au premier plan, calibré exactement sur 1024x1024 -->
+                <svg class="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 1024 1024" preserveAspectRatio="xMidYMid meet" style="z-index: 10;">
+                    <defs>
+                        <mask id="cutout-mask">
+                            <!-- Fond blanc (ce qui sera assombri) -->
+                            <rect width="1024" height="1024" fill="white" />
+                            <!-- Forme noire (la zone transparente). Dimensions exactes de Python -->
+                            <rect x="92" y="92" width="839" height="839" rx="176" ry="176" fill="black" />
+                        </mask>
+                    </defs>
+                    <!-- Voile sombre percé par le masque -->
+                    <rect width="1024" height="1024" fill="rgba(0, 0, 0, 0.65)" mask="url(#cutout-mask)" />
+                    <!-- Bordure blanche fine pour bien délimiter la forme -->
+                    <rect x="92" y="92" width="839" height="839" rx="176" ry="176" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="4" />
+                </svg>
+            </div>
+
+            <!-- Contrôle du zoom -->
+            <div class="mt-6 flex items-center space-x-3 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7"></path></svg>
+                <input type="range" id="zoom-slider" min="0.01" max="5" step="0.001" value="1" class="w-full accent-blue-600">
+                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path></svg>
+            </div>
+            <p class="text-xs text-center text-gray-400 mt-2">Vous pouvez aussi utiliser la molette de la souris pour zoomer.</p>
+
+            <div class="mt-6 flex space-x-3">
+                <button id="btn-cancel" class="flex-1 py-3 px-4 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition">Annuler</button>
+                <button id="btn-generate" class="flex-1 py-3 px-4 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 shadow-lg shadow-blue-200 transition">Générer l'icône</button>
+            </div>
+        </div>
+
+        <!-- ETAPE 3 : Résultat -->
+        <div id="step-result" class="hidden fade-in text-center">
+            <h2 class="text-sm font-semibold text-gray-700 mb-3">Votre icône est prête !</h2>
+            
+            <div class="relative w-48 h-48 mx-auto bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCI+PHJlY3Qgd2lkdGg9IjEwIiBoZWlnaHQ9IjEwIiBmaWxsPSIjZWVlIi8+PHJlY3QgeD0iMTAiIHdpZHRoPSIxMCIgaGVpZ2h0PSIxMCIgZmlsbD0iI2ZmZiIvPjxyZWN0IHk9IjEwIiB3aWR0aD0iMTAiIGhlaWdodD0iMTAiIGZpbGw9IiNmZmYiLz48cmVjdCB4PSIxMCIgeT0iMTAiIHdpZHRoPSIxMCIgaGVpZ2h0PSIxMCIgZmlsbD0iI2VlZSIvPjwvc3ZnPg==')] rounded-xl border border-gray-200 p-2 mb-6">
+                <!-- Image générée -->
+                <img id="final-image" class="w-full h-full drop-shadow-md" src="" alt="Icône finale" />
+            </div>
+
+            <a id="btn-download" href="#" download="macOS_icon.png" class="block w-full py-3 px-4 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 shadow-lg shadow-green-100 transition mb-3">
+                Télécharger (1024x1024)
+            </a>
+            <button id="btn-restart" class="block w-full py-3 px-4 bg-gray-100 text-gray-600 rounded-lg font-semibold hover:bg-gray-200 transition">
+                Créer une autre icône
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        // DOM Elements
+        const stepUpload = document.getElementById('step-upload');
+        const stepPreview = document.getElementById('step-preview');
+        const stepResult = document.getElementById('step-result');
+        
+        const fileInput = document.getElementById('file-input');
+        const previewImage = document.getElementById('preview-image');
+        const finalImage = document.getElementById('final-image');
+        const btnDownload = document.getElementById('btn-download');
+        
+        const btnCancel = document.getElementById('btn-cancel');
+        const btnGenerate = document.getElementById('btn-generate');
+        const btnRestart = document.getElementById('btn-restart');
+
+        const cropContainer = document.getElementById('crop-container');
+        const zoomSlider = document.getElementById('zoom-slider');
+
+        // Variables Image
+        let sourceImageElement = new Image();
+        let scale = 1;
+        let posX = 0;
+        let posY = 0;
+        let isDragging = false;
+        let startX, startY;
+
+        function updateTransform() {
+            previewImage.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
+        }
+
+        function resetImageTransform() {
+            // On utilise getBoundingClientRect pour avoir la largeur en float précis (ex: 384.5px)
+            const containerSize = cropContainer.getBoundingClientRect().width;
+            
+            const imgW = sourceImageElement.width;
+            const imgH = sourceImageElement.height;
+            
+            // Calcul du scale initial pour couvrir tout le carré (cover)
+            const scaleX = containerSize / imgW;
+            const scaleY = containerSize / imgH;
+            scale = Math.max(scaleX, scaleY);
+            
+            // Centrage initial
+            posX = (containerSize - imgW * scale) / 2;
+            posY = (containerSize - imgH * scale) / 2;
+            
+            // Configuration slider
+            zoomSlider.min = Math.min(scaleX, scaleY) * 0.2;
+            zoomSlider.max = scale * 8;
+            zoomSlider.value = scale;
+
+            updateTransform();
+        }
+
+        fileInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                previewImage.src = e.target.result;
+                sourceImageElement.onload = function() {
+                    stepUpload.classList.add('hidden');
+                    stepPreview.classList.remove('hidden');
+                    // Délai pour laisser le DOM afficher le conteneur et récupérer sa vraie taille
+                    setTimeout(resetImageTransform, 50);
+                };
+                sourceImageElement.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // --- MANIPULATION (Drag & Drop) ---
+        function startDrag(clientX, clientY) {
+            isDragging = true;
+            startX = clientX - posX;
+            startY = clientY - posY;
+        }
+
+        function onDrag(clientX, clientY) {
+            if (!isDragging) return;
+            posX = clientX - startX;
+            posY = clientY - startY;
+            updateTransform();
+        }
+
+        cropContainer.addEventListener('mousedown', (e) => startDrag(e.clientX, e.clientY));
+        window.addEventListener('mousemove', (e) => onDrag(e.clientX, e.clientY));
+        window.addEventListener('mouseup', () => isDragging = false);
+
+        // Tactile
+        cropContainer.addEventListener('touchstart', (e) => {
+            if(e.touches.length === 1) startDrag(e.touches[0].clientX, e.touches[0].clientY);
+        });
+        window.addEventListener('touchmove', (e) => {
+            if(e.touches.length === 1 && isDragging) {
+                e.preventDefault(); // Empêche le défilement de la page pendant le déplacement
+                onDrag(e.touches[0].clientX, e.touches[0].clientY);
+            }
+        }, {passive: false});
+        window.addEventListener('touchend', () => isDragging = false);
+
+        // --- ZOOM (Slider) ---
+        zoomSlider.addEventListener('input', function(e) {
+            const containerSize = cropContainer.getBoundingClientRect().width;
+            const newScale = parseFloat(e.target.value);
+            
+            const originX = containerSize / 2;
+            const originY = containerSize / 2;
+            const imgX = (originX - posX) / scale;
+            const imgY = (originY - posY) / scale;
+            
+            scale = newScale;
+            posX = originX - imgX * scale;
+            posY = originY - imgY * scale;
+            
+            updateTransform();
+        });
+
+        // --- ZOOM (Molette Souris) ---
+        cropContainer.addEventListener('wheel', (e) => {
+            e.preventDefault(); // Empêche la page de scroller
+            
+            const rect = cropContainer.getBoundingClientRect();
+            // Position de la souris relative au conteneur
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            // Déterminer la nouvelle échelle
+            const zoomSensitivity = 0.002;
+            const delta = e.deltaY * -zoomSensitivity;
+            let newScale = scale * (1 + delta);
+
+            // Limiter le zoom aux valeurs du slider
+            newScale = Math.max(parseFloat(zoomSlider.min), Math.min(newScale, parseFloat(zoomSlider.max)));
+
+            // Calculer le point de l'image sous la souris pour zoomer vers le curseur
+            const imgX = (mouseX - posX) / scale;
+            const imgY = (mouseY - posY) / scale;
+
+            scale = newScale;
+            posX = mouseX - imgX * scale;
+            posY = mouseY - imgY * scale;
+
+            zoomSlider.value = scale;
+            updateTransform();
+        }, {passive: false});
+
+        // --- NAVIGATION ---
+        btnCancel.addEventListener('click', resetApp);
+        btnRestart.addEventListener('click', resetApp);
+
+        function resetApp() {
+            fileInput.value = '';
+            stepPreview.classList.add('hidden');
+            stepResult.classList.add('hidden');
+            stepUpload.classList.remove('hidden');
+        }
+
+        // --- GENERATION FINALE ---
+        function drawRoundRect(ctx, x, y, width, height, radius) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.arcTo(x + width, y, x + width, y + height, radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.arcTo(x + width, y + height, x, y + height, radius);
+            ctx.lineTo(x + radius, y + height);
+            ctx.arcTo(x, y + height, x, y, radius);
+            ctx.lineTo(x, y + radius);
+            ctx.arcTo(x, y, x + width, y, radius);
+            ctx.closePath();
+        }
+
+        btnGenerate.addEventListener('click', function() {
+            if (!sourceImageElement.complete || !sourceImageElement.src) return;
+
+            // Dimensions finales exactes de ton script Python original
+            const finalCanvasSize = 1024;
+            const paddingRatio = 0.18; // Marge totale de 18%
+            
+            // Calculs exacts : Math.floor pour répliquer le "int()" de Python
+            const innerSize = Math.floor(finalCanvasSize * (1 - paddingRatio)); // = 839
+            const radius = Math.floor(innerSize * 0.21); // = 176
+            const offset = Math.floor((finalCanvasSize - innerSize) / 2); // = 92
+
+            const canvas = document.createElement('canvas');
+            canvas.width = finalCanvasSize;
+            canvas.height = finalCanvasSize;
+            const ctx = canvas.getContext('2d');
+
+            // Récupération de la taille EXACTE du conteneur affiché
+            const currentContainerSize = cropContainer.getBoundingClientRect().width;
+            
+            // Calcul du multiplicateur entre l'écran et le canvas (1024px)
+            const displayToFinalRatio = finalCanvasSize / currentContainerSize;
+
+            // 1. Découpe arrondie (Le Masque final)
+            ctx.save();
+            drawRoundRect(ctx, offset, offset, innerSize, innerSize, radius);
+            ctx.clip();
+
+            // 2. Dessin de l'image (calcul ultra-précis basé sur l'aperçu)
+            const finalX = posX * displayToFinalRatio;
+            const finalY = posY * displayToFinalRatio;
+            
+            // sourceImageElement.width correspond à la vraie taille sans "max-width: 100%"
+            const finalW = sourceImageElement.width * scale * displayToFinalRatio;
+            const finalH = sourceImageElement.height * scale * displayToFinalRatio;
+
+            // Lissage de l'image pour un rendu impeccable
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            
+            // Application
+            ctx.drawImage(sourceImageElement, finalX, finalY, finalW, finalH);
+            ctx.restore();
+
+            // Affichage du résultat
+            const finalDataUrl = canvas.toDataURL('image/png');
+            finalImage.src = finalDataUrl;
+            btnDownload.href = finalDataUrl;
+            
+            stepPreview.classList.add('hidden');
+            stepResult.classList.remove('hidden');
+        });
+    </script>
+</body>
+</html>
